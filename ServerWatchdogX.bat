@@ -1,281 +1,106 @@
-@ECHO Off & SETLOCAL EnableDelayedExpansion
-MODE 120,31
-COLOR 1B
-TITLE lll       Bello vX       lll   Status: Starting up...
+@ECHO OFF & SETLOCAL EnableDelayedExpansion
+::: Change the CodePage to 437 (DOS Latin-1)
+CHCP 437 >NUL
+::: When Parameter is set to "Worker" script will run in worker mode
+IF /I "%~1"=="Worker" (
+   GOTO :StartWorker
+)
 
 
+:::Version:Information::::::::::::::::::::::::
 :::    /// ::: /// ::: /// ::: /// ::: /// :::
-SET "VER=0.2.1"
-SET "VERSION=0.2.1-20210310"
+SET "VER=0.2.5" ::: Script version
+SET "REV=30032022" ::: Code revision
+SET "GLOBALTTL=lll       Bello vX       lll"
+SET "SysUptimeLength=short" ::: long/short
 :::    /// ::: /// ::: /// ::: /// ::: /// :::
 
 
 
-::USER:SETTINGS::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+:::USER:SETTINGS:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+:::Change:the:following:settings:to:your:needs.::::::::::::::::::::::::::::::::::::::::::::::::::::
 :::: /// ::: /// ::: /// ::: /// ::: /// :::/// ::: /// ::: /// ::: /// ::: /// :::/// ::: /// ::::
 :Settings
-SET "UsableLines=30"							::: Text line count to calculate UI on	 default:30
-SET "SSharedFolder=C:\Dropbox\ZZZ_SVDX_Comms"	 ::: Server shared folder cloud/local share
-SET "SPrivateFolder=C:\Scripts"							 ::: Pure server folder
-SET "CSharedFolder=D:\Dropbox\ZZZ_SVDX_Comms"	 ::: Client shared folder cloud/local share
-SET "GlobalTitle=lll       Bello vX       lll   codebase[!VERSION!]"
+SET "UsableLines=30"                              ::: Text line count to calculate UI on default:30
+SET "SSharedFolder="	                             ::: Server shared folder cloud/local share
+SET "SPrivateFolder="							        ::: Pure server folder
+SET "CSharedFolder="	                             ::: Client shared folder cloud/local share
 :::: /// ::: /// ::: /// ::: /// ::: /// :::/// ::: /// ::: /// ::: /// ::: /// :::/// ::: /// ::::
 :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 
 
-::TODO:::::::::::::::::::::::::::::::::::::::::::::::
-REM self copy into temporary directory, but transfer original starting point in order to prevent runtime errors when script is edited 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::
+:::::::::::::::::::
+::: --- DISPLAY ---
+TITLE %GLOBALTTL%   [codebase: %VER% rev. %REV%] - The Windows Server Watchdog Toolkit
+::: Display window size is 120x31
+MODE 120,31
+::: Display color is White on Dark Blue
+COLOR 1B
 
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::Pre:Start:Setup::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::::/CALLS::::
-SET "UPD=CALL :SplashCoexist"
-SET "DFC=CALL :DontFreeze"
-::::/FIRSTSET::::
-SET "DF=0"
-SET "ERRORCOUNT=0"
-SET "WARNCOUNT=0"
+
+CALL :CleanBeforeStart
+CALL :ChooseNetworkCard
+
+
+::: Spawn the worker background process
+START /MIN "" %~dpnx0 "Worker"
+
+::: FirstSet
+SET "DontFreeze=0"
+SET "DogWaggle=0"
+SET "ErrorCount=0"
+SET "WarnCount=0"
 SET "IPv4Gate=not defined"
 SET "IPv6Gate=not defined"
-SET "ZC=1"
-SET "FIX2=is"
-!DFC!
+
 CALL :SplashSet
-CALL :DetectIfClientOrServer
-!DFC!
-CALL :IsTeamViewerInstalled
-CALL :SetCommands
-!DFC!
-CALL :ChooseNetworkCard
-:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-:MAIN
-TITLE !GlobalTitle!
-CALL :ResetAll
-CALL :GenerateHeartbeat
-SET "L2=---[Status]"
-!ITR!SET "L3=	 [ ] Fetching IsProcessRunning"
-SET "L5=	 [ ] Fetching Memory usage
-SET "L6=	 [ ] Fetching GetInternetConnection1"
-SET "L7=	 [ ] Fetching GetInternetConnection2 (Gateway Adress)"
-SET "L8=	 [ ] Fetching Results..."
-SET "L9=	 [ ] Preparing briefing..."
-CALL :GetMemoryLoadPercentage1
-CALL :GetCPULoadPercentage
-SET "L3=	>[ ] Fetching IsProcessRunning"
-!UPD!
-!ITR!CALL :IsProcessRunning
-!ITR!SET "L3=	 [*] Fetching IsProcessRunning"
-!UPD!
-SET "L6=	>[ ] Fetching GetInternetConnection1"
-!UPD!
-CALL :GetInternetConnection1
-SET "L6=	 [*] Fetching GetInternetConnection1"
-!UPD!
-SET "L7=	>[ ] Fetching GetInternetConnection2 (Gateway Adress)"
-!UPD!
-CALL :GetCPULoadPercentage
-CALL :GetInternetConnection2
-SET "L7=	 [*] Fetching GetInternetConnection2 (Gateway Adress)"
-!UPD!
-CALL :GetCPULoadPercentage
-SET "L8=	>[ ] Fetching Results..."
-!UPD!
-CALL :Results
-SET "L8=	 [*] Fetching Results..."
-SET "L9=	 [*] Preparing Briefing..."
-!UPD!
-CALL :WAITUpd
-GOTO :MAIN
-EXIT /B
 
-REM /////////////////////////////////////////////////////////////
- 
-:IsProcessRunning
-FOR /F "delims=]+ tokens=1,2,3,4" %%A IN ('TASKLIST /FI "IMAGENAME eq TeamViewer.exe" ^| FIND /I /N "TeamViewer"') DO (
-	SET "TMPModify=%%B"
-	SET "TMPModify=!TMPModify:~0,14!
-)
-!DFC!
-IF /i "!TMPModify!"=="TeamViewer.exe" (
-	FOR /F "delims=*" %%A IN ('TASKLIST /fi "status eq not responding" /nh ^| FIND /I /N "TeamViewer.exe"') DO (
-		SET "TMPModify2=%%B"
-		SET "TMPModify2=!TMPModify2:~0,14!
-	)
-	IF "%ERRORLEVEL%"=="0" (
-		REM TeamViewer not Responding
-	) ELSE (
-		REM TeamViewer Responding.
-		SET "IsProcessRunning.Result=TeamViewerRunning"
-	)
-	SET "IsProcessRunning.Result=TeamViewerRunning"
-) ELSE (
-	SET /A ERRORCOUNT+=1
-	SET "IsProcessRunning.Result=TeamViewerNotRunning"
-	CALL :GetTeamViewerRunning
-)
-EXIT /B
 
-:GetTeamViewerRunning
-FOR /L %%A in (1,1,5) DO (
-	TASKKILL /IM "TeamViewer.exe" 2>NUL
-)
-TIMEOUT /T 3 >NUL
-Start "" "!TVPath!"
-TIMEOUT /T 3 >NUL
-SET "FIX= - TeamViewer was started automatically."
-SET "FIX2=was"
-EXIT /B
 
-:SetCommands
-SET "SPL26=               [Commands]---"
-SET "L25=---[Restart Computer]----!TRIM1!---[Copy IPv4 to Clipboard]"
-SET "L26=            î             !TRIM2!                              î              "
-SET "L27=---------[Copy IPv6 to Clipboard]----------[Restart Watchdog]"
-SET "L28=                  î                         î     "
-SET "L29=                    [X] Emergency restart packet"
-SET "L30=                     î"
-EXIT /B
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+:::Display:Worker:Main:Loop:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-:ResetAll
-FOR /L %%A in (1,1,24) do (
-	SET "L%%A="
+:DisplayLoop
+CALL :Display
+IF %DogWaggle% EQU 0 (
+    CALL :ResetAll
 )
-FOR /L %%A in (12,1,15) do (
-	SET "SPL%%A=                            "
+REM DEBUG inject to kill worker after 150 ticks
+REM IF DEFINED BGPTick (
+REM    IF !BGPTick! GTR 150 (
+REM       CALL :KillWorker
+REM    )
+REM )
+TIMEOUT /T 1 >NUL
+IF !BGPTick! GTR 3 (
+   CALL :LoadData
 )
-!DFC!
-MODE 120,31
-SET "TMPModify="
-SET "FIX="
-SET "ZC=1"
-EXIT /B 
 
-:GetInternetConnection1
-PING -n 3 -w 1000 8.8.8.8 | find /i "bytes=" >NUL
-!DFC!
-IF %ERRORLEVEL% EQU 0 (
-	SET "InternetConnectedFlag=true"
-	SET "GetInternetConnection1.Result=InternetConnection1Connected"
-) ELSE (
-	SET /A ERRORCOUNT+=1
-	SET "InternetConnectedFlag=false"
-	SET "GetInternetConnection1.Result=InternetConnection1NotPossible"
-)
-EXIT /B
+GOTO :DisplayLoop
 
-:GetCPULoadPercentage
-FOR /F "skip=1 usebackq delims=*" %%A IN (`wmic cpu get loadpercentage`) DO (
-	SET "CPUUsage!ZC!=%%A"
-	SET "L4=	 [%ZC%] Probing CPU Usage: !CPUUsage%ZC%!"
-	!DFC!
-	GOTO :GetCPULoadPercentage.Avg
-)
-:GetCPULoadPercentage.Avg
-IF !ZC! EQU 3 (
-	SET /A "CPUUsageAvg=CPUUsage1+CPUUsage2+CPUUsage3"
-	SET /A "CPUUsageAvg=CPUUsageAvg/3"
-	IF !CPUUsageAvg! GTR 80 (
-		SET /A WARNCOUNT+=1
-		SET "GetCPULoadPercentage.Result=CPULoadAvgHigh"
-		SET "L4=	 [*] High CPU Usage: !CPUUsageAvg!%%"
-	) ELSE (
-		SET "GetCPULoadPercentage.Result=CPULoadAvgNorm"
-		SET "L4=	 [*] Average CPU Usage: !CPUUsageAvg!%%"
-	)
-)
-!DFC!
-SET /a ZC+=1
-EXIT /B
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-:GetMemoryLoadPercentage1
-FOR /F "skip=1 usebackq" %%D IN (`wmic ComputerSystem get TotalPhysicalMemory`) DO (
-	SET "TotalMemory=%%D"
-	GOTO :GetMemoryLoadPercentage2
-)
-:GetMemoryLoadPercentage2
-FOR /F "skip=1 usebackq" %%E IN (`wmic OS get FreePhysicalMemory`) DO (
-	SET "AvailableMemory=%%E"
-	GOTO :GetMemoryLoadPercentage.ProcessValues
-)
-:GetMemoryLoadPercentage.ProcessValues
-SET "TotalMemory=%TotalMemory:~0,-6%"
-SET /A TotalMemory+=50
-SET /A TotalMemory/=1024
-SET /A TotalMemory*=1024
-SET /A AvailableMemory/=1024
-SET /A "UsedMemory=TotalMemory - AvailableMemory"
-SET /A "UsedPercent=(UsedMemory * 100) / TotalMemory"
-IF !UsedPercent! GTR 80 (
-	SET /A WARNCOUNT+=1
-	SET "GetMemoryLoadPercentage.Result=MemoryLoadAvgHigh"
-	SET "L5=	 [*] High Memory Usage: !UsedPercent!%%"
-) ELSE IF !UsedPercent! LSS 80 (
-	SET "GetMemoryLoadPercentage.Result=MemoryLoadAvgNorm"
-	SET "L5=	 [*] Average Memory Usage: !UsedPercent!%%"
-)
-EXIT /B
 
-:IsTeamViewerInstalled
-FOR /f "usebackq tokens=3*" %%A IN (`reg query HKLM\SOFTWARE\WOW6432Node\TeamViewer /v InstallationDirectory`) DO (
-	SET "TVPath=%%A %%B"
-	SET "TVPath=!TVPath!\TeamViewer.exe"
-)
-IF %ERRORLEVEL% EQU 0 (
-	REM ECHO. [DEBUG]TeamViewer is installed.
-	SET "ITR="
-	SET "TRIM1=[Restart TeamViewer]"
-	SET "TRIM2=î"
-) ELSE (
-	ECHO.ERROR^!^!^! Team Viewer might not be installed.
-	SET "L3=	 (x) Module IsProcessRunning deactivated"
-	SET "TRIM1=--------------------"
-	SET "TRIM2= "
-	SET "ITR=REM "
-)
-EXIT /B
 
-:GetInternetConnection2
-SET "GATEWAYADDR="
-REM IPv4&IPv6
-FOR /F "usebackq tokens=2-3 delims={+,+}" %%A IN (`wmic nicconfig where "IPEnabled=TRUE and Caption='%ChosenNetworkCard%'" get defaultipgateway /format:list ^| findstr "I"`) DO (
-	SET "IPv4GateTMP=%%~A"
-	SET "IPv6GateTMP="
-	IF DEFINED IPv4GateTMP ( SET "IPv4GateTMP=!IPv4GateTMP: =!" & IF NOT "!IPv4GateTMP!"=="" ( SET "IPv4Gate=!IPv4GateTMP!" ) )
-	IF DEFINED IPv6GateTMP ( SET "IPv6GateTMP=!IPv6GateTMP: =!" & IF NOT "!IPv6GateTMP!"=="" ( SET "IPv6Gate=!IPv6GateTMP!" ) )
-)
-!DFC!
-IF DEFINED IPv4Gate (
-	PING -n 3 -w 1000 !IPv4Gate! | find /i "bytes=" >NUL
-	!DFC!
-	IF %ERRORLEVEL% EQU 0 (
-		SET "GetInternetConnection2.ResultIPv4=InternetConnection2Connected"
-	) ELSE (
+::: Should run as an endless loop, but if things go out of bounds...
+Timeout /T 60 >NUL
 
-		SET /A ERRORCOUNT+=1
-		SET "GetInternetConnection2.ResultIPv4=InternetConnection2NotPossible"
-	)
-	IF DEFINED IPv6Gate (
-		PING -n 3 -w 1000 !IPv6Gate! | find /i "bytes=" >NUL
-		!DFC!
-		IF %ERRORLEVEL% EQU 0 (
-			SET "GetInternetConnection2.ResultIPv6=InternetConnection2Connected"
-		) ELSE (
-			SET /A ERRORCOUNT+=1
-			SET "GetInternetConnection2.ResultIPv6=InternetConnection2NotPossible"
-		)
-	)
-)
-EXIT /B
+
+
+GOTO :DisplayLoop
+::: --- DISPLAY.Modules ---
 
 :ChooseNetworkCard
-IF EXIST "%SPrivateFolder%\ServerWatchdogLastSession.txt" (
+IF EXIST ".\ServerWatchdogLastSession.txt" (
 	ECHO.It seems like there is an existing Session. Do you want to read the settings from the last session?
-	CHOICE /C YN /T 4 /D Y 
+	CHOICE /C YN /T 4 /D Y
 	IF !ERRORLEVEL! EQU 1 (
-		FOR /F "usebackq delims=*" %%X IN ("%SPrivateFolder%\ServerWatchdogLastSession.txt") DO (
-			SET "Choice=%%X" 
+		FOR /F "usebackq delims=*" %%X IN (".\ServerWatchdogLastSession.txt") DO (
+			SET "Choice=%%X"
 		)
 		SET "NETW=1"
 		FOR /F "skip=2 usebackq tokens=2* delims=, " %%A IN (`wmic nicconfig where "IPEnabled=TRUE and IPConnectionMetric>0" get Caption /format:csv`) DO (
@@ -284,11 +109,9 @@ IF EXIST "%SPrivateFolder%\ServerWatchdogLastSession.txt" (
 		)
 		ECHO.Set the NetworkCard Choice to !Choice!.
 		GOTO :ChooseNetworkCard.Choice
-	)
-	IF !ERRORLEVEL! EQU 2 (
+	) ELSE (
 		GOTO :ChooseNetworkCard.NewSession
 	)
-	
 )
 :ChooseNetworkCard.NewSession
 ECHO. Setup
@@ -309,7 +132,7 @@ IF DEFINED Choice (
 	) ELSE (
 		SET /P "Choice=>"
 )
-ECHO.!Choice!>"%SPrivateFolder%\ServerWatchdogLastSession.txt"
+ECHO.!Choice!>".\ServerWatchdogLastSession.txt"
 IF DEFINED NET!Choice! (
 	SET "ChosenNetworkCard=!NET%Choice%!"
 )
@@ -334,140 +157,73 @@ Set _dd=%_dd:~-2%
 Set _hour=%_hour:~-2%
 Set _minute=%_minute:~-2%
 Set _second=%_second:~-2%
-ECHO.%_yyyy%_%_mm%_%_dd%;%_hour%_%_minute%_%_second%>"!SSharedFolder!\heartbeat.srvf"
-IF NOT EXIST "!SSharedFolder!\heartbeat.srvf" (
+ECHO.%_yyyy%_%_mm%_%_dd%;%_hour%_%_minute%_%_second%>".\heartbeat.srvf"
+IF NOT EXIST ".\heartbeat.srvf" (
 	TITLE !GlobalTitle!   l   Heartbeat ERROR [^</3]
 ) ELSE (
 	TITLE !GlobalTitle!   l   Heartbeat sent: [^<3] %_hour%:%_minute%:%_second%
 )
 EXIT /B
 
-:DetectIfClientOrServer
-EXIT /B
-
-:ServerRestartOverSharedFolder.Client
-
-ECHO.RESTART>"%CSharedFolder%\ServerWatchdogLastWish.ZZZ"
-ECHO.Emergency Restart packet was sent. The server should restart in about 50 seconds and be up in 2 Minutes max.,
-PAUSE >NUL
-EXIT /B
-:ServerRestartOverSharedFolder.Server
-IF EXIST "%SSharedFolder%\ServerWatchdogLastWish.ZZZ" (
-	IF EXIST "%SSharedFolder%\ServerWatchdogLockFile.YYY" (
-		EXIT /B
-	)
-	IF EXIST "%TEMP%\ServerWatchdogLastWishClientPacket.ZZZ" (	
-		EXIT /B
-	)
-	ECHO.Emergency restart packet was received.
-	DEL /F /Q "%SSharedFolder%\ServerWatchdogLastWish.ZZZ"
-	ECHO.LOCKED!TIME!;!DATE!>"%SharedFolder%\ServerWatchdogLockFile.YYY"
-	REM Let shared folder sync deleted file to avoid reboot-loop and sync lockfile to avoid reboot-loop.
-	REM Lockfile in case the sync fails due to internet outage
-	TIMEOUT /T 30 >NUL
-	shutdown /r /f /t 10
-)
-EXIT /B
-:WAITUpd
-FOR /L %%A in (60,-1,1) DO (
-	CHOICE /C NTC46W /T 1 /D N >NUL
-	IF %ERRORLEVEL% EQU 1 (
-		SET "BLANK="
-	)
-	IF %ERRORLEVEL% EQU 2 (
-		REM Restart TeamViewer Choice
-	)
-	IF %ERRORLEVEL% EQU 3 (
-		REM Restart Computer Choice
-	)
-	IF %ERRORLEVEL% EQU 4 (
-		REM Copy IPv4 Choice
-		ECHO !IPv4Gate!^| CLIP
-		PAUSE
-	)
-	IF %ERRORLEVEL% EQU 5 (
-		REM Copy IPv6 Choice
-		ECHO !IPv6Gate!^| CLIP
-		PAUSE
-	)
-	IF %ERRORLEVEL% EQU 6 (
-		REM Restart Watchdog Choice
-	)
-	SET "SPL13=  Waiting for %%A seconds... "
-	IF %%A EQU 30 ( CALL :GenerateHeartbeat )
-	IF %%A EQU 1 (
-		SET "SPL13=  Waiting for %%A second...  "
-	)
-	CALL :TailAnim
-	!UPD!
-)
-SET "SPL13=  Watchdog is on Duty...      "
-EXIT /B
-
-:TailAnim
+:CalculateLength
+SET "SplashStringMaxLen=27"
+SET "DisplayStringMaxLen=92"
 EXIT /B
 
 
-REM SET /A tail+=1
-:::default
-SET "SPL6=  .    /   \ /              "
-SET "SPL7=   \ /`    \\\              "
-SET "SPL8=    `\     /_\\             "
-SET "SPL9=     `~~~~~` `~`            "
-:::waggle_mid
-SET "SPL6=       /   \ /              "
-SET "SPL7= ,-. /`    \\\              "
-SET "SPL8=    `\     /_\\             "
-SET "SPL9=     `~~~~~` `~`            "
-:::waggle_down
-SET "SPL6=       /   \ /              "
-SET "SPL7=     /`    \\\              "
-SET "SPL8=  ,-´\     /_\\             "
-SET "SPL9= ´   `~~~~~` `~`            "
-
-EXIT /B
-
-:DontFreeze
-IF "%DF%"=="1" (
-	SET "DF=0"
-	SET "L1=                                                                                        ßÜ"
-	SET "SPL30=Üß                          "
-) ELSE IF "%DF%"=="0" (
-	SET "DF=1"
-	SET "L1=                                                                                        Üß"
-	SET "SPL30=ßÜ                          "
-)
-EXIT /B
-
-:GetInternetConnection3
-PING -n 2 -w 1000 8.8.8.8 | find /i "bytes=" >NUL
-IF %ERRORLEVEL% EQU 0 (
-    ECHO. [i] Connected to the internet.
-	SET "GetInternetConnection3.Result=InternetConnection1Connected"
+:CheckBGPTick
+IF NOT DEFINED BGPTick (
+    IF NOT EXIST ".\t" (
+        SET "L30=                                        Background worker process is terminated^!"
+        CALL :KillWorker
+    ) ELSE (
+        SET /P BGPTick=<".\t"
+        IF NOT DEFINED BGPTick (
+          SET "L30="
+        ) ELSE (
+          SET "L30=                                        Background worker process tick {%BGPTick%}"
+        )
+    )
 ) ELSE (
-    ECHO. /^^!\ Not connected to the internet.
-	SET /A ERRORCOUNT+=1
-	SET "GetInternetConnection3.Result=InternetConnection1NotPossible"
+    IF NOT EXIST ".\t" (
+        SET "L2=  Background worker process is terminated^!"
+        CALL :KillWorker
+    ) ELSE (
+       SET "BGPTickOld=!BGPTick!"
+       SET /P BGPTick=<".\t"
+       IF !BGPTickOld! EQU !BGPTick! (
+          IF NOT DEFINED BGPTickErr (
+             SET /A BGPTickErr+=1
+             SET "L30=                                        Background worker process tick {%BGPTick%}"
+          ) ELSE IF !BGPTickErr! GTR 4 (
+             SET "L30=                                        Background worker process is restarting..."
+             CALL :KillWorker
+          ) ELSE (
+             SET /A BGPTickErr+=1
+             SET "L30=                                        Background worker process is terminated^!"
+          )
+       ) ELSE (
+             SET "BGPTickErr="
+             SET "L30=                                        Background worker process tick {%BGPTick%}"
+       )
+    )
 )
 EXIT /B
+
+
+:LoadData
+CALL :ResetDisplay
+IF EXIST "layout.gtx" (
+    FOR /F "usebackq delims=*" %%I IN (".\layout.gtx") DO SET %%I
+)
+EXIT /B
+
 
 :SplashSet
-REM OLD SPLASH COMMENTED OUT
-REM ECHO. ^<^^!-- 
-REM ECHO.         ^|`-.__
-REM ECHO.          / '  _/ !VER!
-REM ECHO.         ^*^*^*^*`
-REM ECHO.        /    }
-REM ECHO.  .    /   \ /
-REM ECHO.   \ /`    \\\
-REM ECHO.    `\     /_\\
-REM ECHO.     `~~~~~` `~`
-REM ECHO.
-REM ECHO.  Watchdog goes woof^^!  --^>
 SET "SPL1=^<^!--                        "
 SET "SPL2=         |`-.__             "
-SET "SPL3=          / '  _/ !VER!     "
-SET "SPL4=         ****`              "
+SET "SPL3=          / '  _/ Bello vX  "
+SET "SPL4=         ****`     !VER!    "
 SET "SPL5=        /    }              "
 SET "SPL6=  .    /   \ /              "
 SET "SPL7=   \ /`    \\\              "
@@ -479,92 +235,452 @@ SET "SPL12=                            "
 SET "SPL13=                            "
 SET "SPL14=                            "
 SET "SPL15=                            "
-SET "SPACER=                            "
+SET "SPACER=                           "
+SET "L14=                                       +-------------+"
+SET "L15=                                       | Starting up |"
+SET "L16=                                       | Please wait |"
+SET "L17=                                       +-------------+"
 EXIT /B
 
 
-:SplashCoexist
+:DogTailAnimation
+CALL :CheckBGPTick
+IF %DogWaggle% EQU 0 (
+    :::default
+    SET "SPL6=  .    /   \ /              "
+    SET "SPL7=   \ /`    \\\              "
+    SET "SPL8=    `\     /_\\             "
+    SET "SPL9=     `~~~~~` `~`            "
+    SET "DogWaggle=1"
+) ELSE IF %DogWaggle% EQU 1 (
+    :::waggle_HighMid
+    SET "SPL6=       /   \ /              "
+    SET "SPL7= ,-. /`    \\\              "
+    SET "SPL8=    `\     /_\\             "
+    SET "SPL9=     `~~~~~` `~`            "
+    SET "DogWaggle=2"
+    EXIT /B
+) ELSE IF %DogWaggle% EQU 2 (
+    :::waggle_LowMid
+    SET "SPL6=       /   \ /              "
+    SET "SPL7=     /`    \\\              "
+    SET "SPL8=  ,-`\     /_\\             "
+    SET "SPL9= `   `~~~~~` `~`            "
+    SET "DogWaggle=3"
+    EXIT /B
+) ELSE IF %DogWaggle% EQU 3 (
+    :::waggle_HighMid
+    SET "SPL6=       /   \ /              "
+    SET "SPL7= ,-. /`    \\\              "
+    SET "SPL8=    `\     /_\\             "
+    SET "SPL9=     `~~~~~` `~`            "
+    SET "DogWaggle=0"
+    EXIT /B
+)
+EXIT /B
+
+:BuildCommandPallette
+EXIT /B
+
+:ResetAll
+FOR /L %%A in (1,1,24) DO (
+	SET "L%%A="
+)
+FOR /L %%A in (12,1,15) DO (
+	SET "SPL%%A=                            "
+)
+EXIT /B
+
+
+:ResetDisplay
+FOR /L %%A in (1,1,30) DO (
+	SET "L%%A="
+)
+EXIT /B
+
+
+:Display
+CALL :DogTailAnimation
+::: Clear
 CLS
-!DFC!
 FOR /L %%A in (1,1,!UsableLines!) DO (
 	IF DEFINED SPL%%A (
 		IF DEFINED L%%A (
 			ECHO.!SPL%%A!^|!L%%A!
+		) ELSE IF NOT DEFINED L%%A (
+			ECHO.!SPL%%A!^|
 		)
-		IF NOT DEFINED L%%A (
-			ECHO.!SPL%%A!^|!L%%A!
-		)
-	)
-	IF NOT DEFINED SPL%%A (
-		ECHO.!SPACER!^|!L%%A!
+	) ELSE IF NOT DEFINED SPL%%A (
+		ECHO.!SPACER! ^|!L%%A!
 	)
 )
 EXIT /B
 
-
-REM // Old Display Code	
-REM FOR /L %%A in (1,1,15) DO (
-	ECHO.!SPL%%A! ^|!L%%A!
-)
-REM FOR /L %%A in (16,1,!UsableLines!) DO (
-	ECHO.!SPACER! ^|!L%%A!
-)
-
-:Results
-SET "L12=---[Briefing]"
-IF !ERRORCOUNT! LSS 1 (
-	SET "L14=   [!ERRORCOUNT!] There were !ERRORCOUNT! Errors."
-	CALL :Results.2
-) ELSE IF !ERRORCOUNT! LSS 2 (
-	SET "L14=   /^!\ [!ERRORCOUNT!] There was !ERRORCOUNT! Error:"
-	CALL :Results.2
-) ELSE (
-	SET "L14=   /^!\ [!ERRORCOUNT!] There were !ERRORCOUNT! Errors:"
-	CALL :Results.2
-)
-IF !ERRORCOUNT! LSS 1 (
-	SET "L20=   [!ERRORCOUNT!] There were !ERRORCOUNT! Warnings."
-	CALL :Results.2
-) ELSE IF !ERRORCOUNT! LSS 2 (
-	SET "L20=   /^!\ [!ERRORCOUNT!] There was !ERRORCOUNT! Warning:"
-	CALL :Results.2
-) ELSE (
-	SET "L20=   /^!\ [!ERRORCOUNT!] There were !ERRORCOUNT! Warning:"
-	CALL :Results.2
-)
-:Results.2
-IF "!IsProcessRunning.Result!"=="TeamViewerRunning" (
-	SET "L15=	 [i] TeamViewer is Running"
-) ELSE IF "!IsProcessRunning.Result!"=="TeamViewerNotRunning" (
-	SET "L15=	 /^!\ TeamViewer !FIX2! not Running^!!FIX!"
-) ELSE IF "!IsProcessRunning.Result!"=="TeamViewerNotInstalled" (
-	SET "L15=	 (x) TeamViewer is not Installed^!"
-)
-IF "!GetInternetConnection1.Result!"=="InternetConnection1Connected" (
-	SET "L16=	 [i] Connected to the internet."
-) ELSE IF "!GetInternetConnection1.Result!"=="InternetConnection1NotPossible" (
-	SET "L16=	 /^!\ Not connected to the internet."
-)
-IF "!GetInternetConnection2.ResultIPv4!"=="InternetConnection2Connected" (
-	SET "L17=	 [i] IPv4: Connected to the Router [!IPv4Gate!]"
-) ELSE IF "!GetInternetConnection2.ResultIPv4!"=="TeamViewerNotRunning" (
-	SET "L17=	 /^!\ IPv4: No connection to the Router [!IPv4Gate!]"	
-)
-IF "!GetInternetConnection2.ResultIPv6!"=="InternetConnection2Connected" (
-	SET "L18=	 [i] IPv6: Connected to the Router [!IPv6Gate!]"
-) ELSE IF "!GetInternetConnection2.ResultIPv6!"=="InternetConnection2NotPossible" (
-	SET "L18=	 /^!\ IPv6: No connection to the Router [!IPv6Gate!]"
-)
-IF "!GetCPULoadPercentage.Result!"=="CPULoadAvgHigh" (
-	SET "L21=	 /^!\ CPU: High load [Average: !CPUUsageAvg!%%]"
-) ELSE IF "!GetCPULoadPercentage.Result!"=="CPULoadAvgNorm" (
-	SET "L21=	 [i] CPU: Normal load  [Average: !CPUUsageAvg!%%]"
-)
-IF "!GetMemoryLoadPercentage.Result!"=="MemoryLoadAvgHigh" (
-	SET "L22=	 /^!\ Memory: High load [Average: !UsedPercent!%%]"
-) ELSE IF "!GetMemoryLoadPercentage.Result!"=="MemoryLoadAvgNorm" (
-	SET "L22=	 [i] Memory: Normal load  [Average: !UsedPercent!%%]"
-)
-SET "ERRORCOUNT=0"
-SET "WARNCOUNT=0"
+:KillWorker
+ECHO.1>".\kill"
+TIMEOUT /T 1 >NUL
+START /MIN "" %~dpnx0 "Worker"
+SET "BGPTick="
+SET "BGPTickOld="
 EXIT /B
+
+
+
+:::::::::::::::::::::::::::
+
+
+
+:::::::::::::::::::
+::: --- WORKER ---
+:StartWorker
+
+TITLE Bello vX background worker process
+SET "PID=%RANDOM:~0,3%-%RANDOM:~0,3%"
+SET "Tick=0"
+
+
+::: RunOnce
+CALL :CleanBeforeStart
+IF !ERRORLEVELCBS! GTR 0 (
+   CALL :Warn "CleanRoutine exited with errors." "!ERRORLEVELCBSREASON!"
+)
+CALL :CreateESC
+CALL :CreateTick
+
+CALL :Info "Bello vX background worker process started. PID: %PID%"
+
+CALL :IsTeamViewerInstalled
+
+::: Suppress non issued error messages
+CALL :Tick 2>NUL
+::: RunAtTick
+
+
+
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+:::Background:Worker:Main:Loop::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+:Tick
+TITLE Bello vX background worker process - {%Tick%}
+SET /A Tick+=1
+ECHO.%Tick%>".\t"
+IF %ERRORLEVEL% GTR 0 (
+    CALL :Error "Can't write to file" "Tick: [.\t]"
+)
+TIMEOUT /T 1 >NUL
+IF %Tick% GTR 31999 (
+    SET "Tick=0"
+    CALL :Info "Reset tick after 32000"
+)
+SET /A ASyncEvent=%Tick%%%5
+IF !ASyncEvent! EQU 0 (
+    CALL :GetSystemUptime
+)
+IF EXIST "./kill" (
+   CALL :ExitWorker
+)
+CALL :LockFile
+CALL :TickLoad
+CALL :TickSave
+CALL :UnlockFile
+GOTO :Tick
+
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
+
+:LockFile
+ECHO.!PID!>".\lock" 2>NUL
+IF %ERRORLEVEL% GTR 0 (
+   CALL :Error "Can't write to file" "LockFile: [.\lock]"
+)
+EXIT /B
+
+:UnlockFile
+DEL /F /Q ".\lock" 2>NUL
+IF %ERRORLEVEL% GTR 0 (
+   CALL :Error "Can't delete file" "UnlockFile: [.\lock]"
+)
+EXIT /B
+
+:TickLoad
+IF EXIST "layout.gtx" (
+    DEL /F /Q "layout.gtx" 2>NUL
+    IF %ERRORLEVEL% GTR 0 (
+       CALL :Error "Can't delete file" "TickLoad: [layout.gtx]"
+    )
+)
+EXIT /B
+
+:TickSave
+IF EXIST ".\lock" (
+   FOR /F "usebackq delims=*" %%I IN (".\lock") DO SET "LockPID=%%I"
+   IF %ERRORLEVEL% GTR 0 (
+       CALL :Error "Can't read from file" "TickSave: [.\lock]"
+   )
+   IF NOT !LockPID! EQU !PID! (
+      CALL :Error "PID mismatch." "TickSave:!LockPID![!PID!]"
+      EXIT
+   )
+)
+IF /i "!SysUptimeLength!"=="long" (
+   ECHO."L28=  [SysUptime]                    Uptime is: !SystemUptimeDays! days, !SystemUptimeHours! hours, !SystemUptimeMinutes! minutes, !SystemUptimeSeconds! seconds.">>"layout.gtx"
+) ELSE IF /i "!SysUptimeLength!"=="short" (
+   ECHO."L28=  [SysUptime]                    Uptime: !SystemUptimeDays!d !SystemUptimeHours!h !SystemUptimeMinutes!m !SystemUptimeSeconds!s.">>"layout.gtx"
+) ELSE (
+   ECHO."L28=  [SysUptime]                    Uptime is: !SystemUptimeDays! days, !SystemUptimeHours! hours, !SystemUptimeMinutes! minutes, !SystemUptimeSeconds! seconds.">>"layout.gtx"
+)
+
+IF !TVInstalled! EQU 1 (
+    ECHO."L20=  [TeamViewerStatus]         TeamViewer is installed.">>"layout.gtx"
+    ECHO."L21=   --^> !TVPath!">>"layout.gtx"
+    ECHO."L22=  [TeamViewerStatus]         TeamViewer is running.">>"layout.gtx"
+) ELSE (
+    ECHO."L20=  [TeamViewerStatus]             TeamViewer is not installed.">>"layout.gtx"
+)
+IF %ERRORLEVEL% GTR 0 (
+       CALL :Error "Can't write to file" "TickSave: [layout.gtx]"
+)
+EXIT /B
+
+:GetSystemUptime
+FOR /F "UseBackQ Tokens=1-4" %%A IN (
+    `Powershell "$OS=GWmi Win32_OperatingSystem;$UP=(Get-Date)-"^
+    "($OS.ConvertToDateTime($OS.LastBootUpTime));$DO='d='+$UP.Days+"^
+    "' h='+$UP.Hours+' n='+$UP.Minutes+' s='+$UP.Seconds;Echo $DO"`) DO (
+    SET "%%A"&SET "%%B"&SET "%%C"&SET "%%D")
+SET "SystemUptimeDays=!d!"
+SET "SystemUptimeHours=!h!"
+SET "SystemUptimeMinutes=!n!"
+SET "SystemUptimeSeconds=!s!"
+IF !SystemUptimeDays! GTR 6 (
+    IF DEFINED SystemUptimeBeyondThreshold (
+       IF !SystemUptimeBeyondThreshold! GTR 5 (
+          CALL :Info "System uptime is beyond threshold. Reboot is required"
+          shutdown -r -t 0 2>NUL
+          IF %ERRORLEVEL% GTR 0 (
+              CALL :Error "Could not issue shutdown command" "SystemUptimeBeyondThreshold: [ERR:!ERRORLEVEL!]"
+          ) ELSE (
+              CALL :Done "Reboot command successful"
+          )
+          TIMEOUT /T 60 >NUL
+       ) ELSE (
+            IF !ASyncEvent! EQU 0 (
+                SET /A SystemUptimeBeyondThreshold+=1
+            )
+        )
+    )
+)
+EXIT /B
+
+:ExitWorker
+CALL :CleanBeforeStart
+EXIT
+
+
+::: --- WORKER.Modules ---
+
+
+:Done
+SET "Reason=%~1"
+SET "Trace=%~2"
+IF DEFINED Trace (
+   SET "Trace={Trace:!Trace!}"
+)
+ECHO.!E![42m!E![30m  !T!  !E![0m!E![32m  [DONE]   [!Time:~0,8!] - !Reason! !Trace! !E![0m
+EXIT /B
+
+:Info
+SET "Reason=%~1"
+SET "Trace=%~2"
+IF DEFINED Trace (
+   SET "Trace={Trace:!Trace!}"
+)
+ECHO.!E![44m!E![30m  i  !E![0m!E![36m  [INFO]   [!Time:~0,8!] - !Reason! !Trace! !E![0m
+EXIT /B
+
+:Warn
+SET "Reason=%~1"
+SET "Trace=%~2"
+IF DEFINED Trace (
+   SET "Trace={Trace:!Trace!}"
+)
+ECHO.!E![43m!E![30m  ^!  !E![0m!E![33m  [WARN]   [!Time:~0,8!] - !Reason! !Trace! !E![0m
+EXIT /B
+
+:Error
+SET "Reason=%~1"
+SET "Trace=%~2"
+IF DEFINED Trace (
+   SET "Trace={Trace:!Trace!}"
+)
+ECHO.!E![41m!E![30m  x  !E![0m!E![91m  [ERROR]  [!Time:~0,8!] - !Reason! !Trace! !E![0m
+EXIT /B
+
+:CreateESC
+FOR /f "delims=" %%E IN (
+    'FORFILES /p "%~dp0." /m "%~nx0" /c "CMD /c ECHO(0x1B"'
+) DO SET "E=%%E"
+EXIT /B
+
+:CreateTick
+::: Alt+0251=û
+FOR /f "delims=" %%T IN (
+    'FORFILES /p "%~dp0." /m "%~nx0" /c "CMD /c ECHO(0xFB"'
+) DO SET "T=%%T"
+EXIT /B
+
+::: RunOnce Modules
+
+:IsTeamViewerInstalled
+FOR /f "usebackq tokens=3*" %%A IN (`reg query HKLM\SOFTWARE\TeamViewer /v InstallationDirectory`) DO (
+	SET "TVPath=%%A %%B"
+	SET "TVPath=!TVPath!\TeamViewer.exe"
+)
+IF %ERRORLEVEL% EQU 0 (
+	CALL :Info "TeamViewer is installed [!TVPATH!]"
+   SET "TVInstalled=1"
+	REM SET "ITR="
+	REM SET "TRIM1=[Restart TeamViewer]"
+	REM SET "TRIM2=î"
+) ELSE (
+	CALL :Warn "TeamViewer is not installed" "IsTeamViewerInstalled:Error"
+   SET "TVInstalled=0"
+	REM SET "L3=	 (x) Module IsProcessRunning deactivated"
+	REM SET "TRIM1=--------------------"
+	REM SET "TRIM2= "
+	REM SET "ITR=REM "
+)
+EXIT /B
+
+:IsProcessRunning
+FOR /F "delims=]+ tokens=1,2,3,4" %%A IN ('TASKLIST /FI "IMAGENAME eq TeamViewer.exe" ^| FIND /I /N "TeamViewer"') DO (
+	SET "TeamViewerResult=%%B"
+	SET "TeamViewerResult=!TeamViewerResult:~0,14!
+)
+!DFC!
+IF /i "!TeamViewerResult!"=="TeamViewer.exe" (
+	FOR /F "delims=*" %%A IN ('TASKLIST /fi "status eq not responding" /nh ^| FIND /I /N "TeamViewer.exe"') DO (
+		SET "TeamViewerResultNotResponding=%%B"
+		SET "TeamViewerResultNotResponding=!TeamViewerResultNotResponding:~0,14!
+	)
+	IF "%ERRORLEVEL%"=="0" (
+		REM TeamViewer not responding
+	) ELSE (
+		REM TeamViewer responding.
+		SET "IsProcessRunning.Result=TeamViewerRunning"
+	)
+	SET "IsProcessRunning.Result=TeamViewerRunning"
+) ELSE (
+	SET "IsProcessRunning.Result=TeamViewerNotRunning"
+	CALL :GetTeamViewerRunning
+)
+EXIT /B
+
+:GetTeamViewerRunning
+FOR /L %%A in (1,1,5) DO (
+	TASKKILL /IM "TeamViewer.exe" 2>NUL
+)
+START "" "!TVPath!"
+EXIT /B
+
+
+:Timestamp
+SET "TS=[!DATE!] [!TIME:~0,2!:!TIME:~3,2!:!TIME:~6,2! !TIME:~9,2!ms] "
+EXIT /B
+
+
+:CleanBeforeStart
+SET "ERRORLEVELCBS=" ::: Clean errorlevel var
+IF EXIST ".\Bello_vX_bgworker.log" (
+   DEL /F /Q ".\Bello_vX_bgworker.log" >NUL
+)
+IF %ERRORLEVEL% GTR 0 (
+   SET "ERRORLEVELCBS=%ERRORLEVEL%"
+   SET "ERRORLEVELCBSREASON=DeleteLog"
+)
+IF EXIST ".\layout.gtx" (
+   DEL /F /Q ".\layout.gtx" >NUL
+)
+IF %ERRORLEVEL% GTR 0 (
+   SET "ERRORLEVELCBS=%ERRORLEVEL%"
+   SET "ERRORLEVELCBSREASON=DeleteLayout"
+)
+IF EXIST ".\lock" (
+   DEL /F /Q ".\lock" >NUL
+)
+IF %ERRORLEVEL% GTR 0 (
+   SET "ERRORLEVELCBS=%ERRORLEVEL%"
+   SET "ERRORLEVELCBSREASON=DeleteLock"
+)
+IF EXIST ".\t" (
+   DEL /F /Q ".\t" >NUL
+)
+IF %ERRORLEVEL% GTR 0 (
+   SET "ERRORLEVELCBS=%ERRORLEVEL%"
+   SET "ERRORLEVELCBSREASON=DeleteTick"
+)
+IF EXIST ".\kill" (
+   DEL /F /Q ".\kill" >NUL
+)
+IF %ERRORLEVEL% GTR 0 (
+   SET "ERRORLEVELCBS=%ERRORLEVEL%"
+   SET "ERRORLEVELCBSREASON=DeleteIssuedKill"
+)
+EXIT /B %ERRORLEVELCBS%
+
+::: RunAtTick Modules
+
+:GetCPULoadPercentage
+FOR /F "skip=1 usebackq delims=*" %%A IN (`wmic cpu get loadpercentage`) DO (
+	SET "CPUUsage!ZC!=%%A"
+	SET "L4=	 [%ZC%] Probing CPU Usage: !CPUUsage%ZC%!"
+	GOTO :GetCPULoadPercentage.Avg
+)
+:GetCPULoadPercentage.Avg
+IF !ZC! EQU 3 (
+	SET /A "CPUUsageAvg=CPUUsage1+CPUUsage2+CPUUsage3"
+	SET /A "CPUUsageAvg=CPUUsageAvg/3"
+	IF !CPUUsageAvg! GTR 80 (
+		SET "GetCPULoadPercentage.Result=CPULoadAvgHigh"
+		SET "L4=	 [*] High CPU Usage: !CPUUsageAvg!%%"
+	) ELSE (
+		SET "GetCPULoadPercentage.Result=CPULoadAvgNorm"
+		SET "L4=	 [*] Average CPU Usage: !CPUUsageAvg!%%"
+	)
+)
+SET /a ZC+=1
+EXIT /B
+
+:GetMemoryTotal
+FOR /F "skip=1 usebackq" %%D IN (`wmic ComputerSystem get TotalPhysicalMemory`) DO (
+	SET "TotalMemory=%%D"
+	GOTO :GetMemoryFree
+)
+:GetMemoryFree
+FOR /F "skip=1 usebackq" %%E IN (`wmic OS get FreePhysicalMemory`) DO (
+	SET "AvailableMemory=%%E"
+	GOTO :GetMemoryLoadPercentage.ProcessValues
+)
+:GetMemoryLoadPercentage.ProcessValues
+SET "TotalMemory=%TotalMemory:~0,-6%"
+SET /A TotalMemory+=50
+SET /A TotalMemory/=1024
+SET /A TotalMemory*=1024
+SET /A AvailableMemory/=1024
+SET /A "UsedMemory=TotalMemory - AvailableMemory"
+SET /A "UsedPercent=(UsedMemory * 100) / TotalMemory"
+IF !UsedPercent! GTR 79 (
+	SET /A WARNCOUNT+=1
+	SET "GetMemoryLoadPercentage.Result=MemoryLoadAvgHigh"
+	SET "L5=	 [*] High Memory Usage: !UsedPercent!%%"
+) ELSE IF !UsedPercent! LSS 80 (
+	SET "GetMemoryLoadPercentage.Result=MemoryLoadAvgNorm"
+	SET "L5=	 [*] Average Memory Usage: !UsedPercent!%%"
+)
+EXIT /B
+
+::::::::::::::::::::::::::
